@@ -1,9 +1,7 @@
 local KickPlayer
 local Movement
 local didClick = {}
-local tempList = setmetatable({}, {
-	__mode = 'k'
-})
+local tempList = setmetatable({}, { __mode = 'k' })
 
 local GuardTarget
 local InmateTarget
@@ -51,9 +49,6 @@ local function findEntity(player)
 			end
 		end
 	end
-
-	-- entitylib drops dead players from .List; rebuild a minimal entity from
-	-- the corpse so we can keep flinging it after death.
 	local char = player.Character
 	if char then
 		local hum = char:FindFirstChildOfClass('Humanoid')
@@ -76,7 +71,6 @@ local function isValidTarget(entity)
 	if entity.Humanoid.Sit and entity.Humanoid.SeatPart and entity.Humanoid.SeatPart.Anchored then return false end
 	if not select(2, whitelist:get(entity.Player)) then return false end
 	if entity.Player.Team == teams.Neutral then return false end
-	-- Only apply spawn protection while alive; corpses bypass it.
 	if entity.Humanoid.Health > 0 and (os.clock() - entity.SpawnTime) <= 5 then return false end
 	return true
 end
@@ -85,7 +79,6 @@ local function getTarget(seat)
 	local targetPlayer = selectedTarget()
 	if not targetPlayer then return end
 
-	-- Cache check no longer requires Health > 0 so a dead target stays cached.
 	local cached = tempList[seat]
 	if cached and cached.Player == targetPlayer and cached.Humanoid and not cached.Humanoid.Sit then
 		return cached
@@ -99,35 +92,69 @@ local function getTarget(seat)
 	return entity
 end
 
--- Alive -> RootPart. Dead -> UpperTorso/Torso/Head/RootPart fallback so we
--- still have a valid part to aim at after the corpse loses its root.
 local function getFlingPart(entity)
 	local root = entity.RootPart
 	if not root then return end
-
 	local isDead = entity.Humanoid and entity.Humanoid.Health <= 0
 	if not isDead then return root end
-
 	local char = root.Parent
 	if not char then return root end
-
 	return char:FindFirstChild('UpperTorso')
 		or char:FindFirstChild('Torso')
 		or char:FindFirstChild('Head')
 		or root
 end
 
+-- Make the whole vehicle one rigid mass by cranking every joint under it.
+-- This is what lets the ram method push a corpse without wheels snapping off.
+local function stiffenVehicle(seat)
+	local vehicle = seat.Parent and seat.Parent.Parent
+	if not vehicle then return end
+
+	for _, d in vehicle:GetDescendants() do
+		if d:IsA('Motor6D') then
+			pcall(function() d.MaxForce = math.huge end)
+			pcall(function() d.MaxTorque = math.huge end)
+		elseif d:IsA('HingeConstraint')
+			or d:IsA('CylindricalConstraint')
+			or d:IsA('BallSocketConstraint')
+			or d:IsA('PrismaticConstraint')
+			or d:IsA('AlignPosition')
+			or d:IsA('AlignOrientation')
+		then
+			pcall(function() d.MaxForce = math.huge end)
+			pcall(function() d.MaxTorque = math.huge end)
+			pcall(function() d.MaxVelocity = math.huge end)
+			pcall(function() d.Responsiveness = math.huge end)
+		elseif d:IsA('Weld') or d:IsA('WeldConstraint') then
+			pcall(function() d.Enabled = true end)
+		end
+	end
+end
+
 local function flingSeat(seat, target)
 	local part = getFlingPart(target)
 	if not part then return end
 
-	seat.AssemblyLinearVelocity = Vector3.new(10000, 10000, 0)
-	seat.CFrame = CFrame.new(part.Position) * CFrame.new(-2, -2, -12)
-	sethiddenproperty(seat, 'PhysicsRepRootPart', part)
+	local isDead = target.Humanoid and target.Humanoid.Health <= 0
 
-	local wheels = seat.Parent.Parent:FindFirstChild('Wheels')
-	if wheels then
-		wheels:Destroy()
+	if isDead then
+		-- Corpse: no PhysicsRepRootPart redirect (server owns the corpse, will
+		-- reject it). Instead stiffen the vehicle and ram physically.
+		stiffenVehicle(seat)
+		seat.AssemblyLinearVelocity = Vector3.new(10000, 10000, 10000)
+		seat.AssemblyAngularVelocity = Vector3.new(20000, 20000, 20000)
+		seat.CFrame = CFrame.new(part.Position) * CFrame.new(-2, -2, -12)
+	else
+		-- Alive: your working fling, unchanged.
+		seat.AssemblyLinearVelocity = Vector3.new(10000, 10000, 0)
+		seat.CFrame = CFrame.new(part.Position) * CFrame.new(-2, -2, -12)
+		sethiddenproperty(seat, 'PhysicsRepRootPart', part)
+
+		local wheels = seat.Parent.Parent:FindFirstChild('Wheels')
+		if wheels then
+			wheels:Destroy()
+		end
 	end
 end
 
@@ -142,9 +169,7 @@ end
 local function watchTarget(plr)
 	clearWatchers()
 	if not plr then return end
-
 	activeTarget = plr
-
 	table.insert(watcherConns, playersService.PlayerRemoving:Connect(function(removed)
 		if removed == plr and KickPlayer and KickPlayer.Enabled then
 			notif('KickPlayer', plr.Name..' has been kicked / left. Disabling.', 5)
@@ -224,27 +249,11 @@ KickPlayer = vape.Categories.Blatant:CreateModule({
 	Tooltip = 'Kicks player specifically. Auto-disables once the target is kicked.'
 })
 
-Movement = KickPlayer:CreateToggle({
-	Name = 'Movement',
-	Default = true
-})
-
-GuardTarget = KickPlayer:CreateDropdown({
-	Name = 'Guard',
-	List = playerNames('Guards')
-})
-InmateTarget = KickPlayer:CreateDropdown({
-	Name = 'Inmates',
-	List = playerNames('Inmates')
-})
-NeutralTarget = KickPlayer:CreateDropdown({
-	Name = 'Neutral',
-	List = playerNames('Neutral')
-})
-CriminalTarget = KickPlayer:CreateDropdown({
-	Name = 'Criminals',
-	List = playerNames('Criminals')
-})
+Movement = KickPlayer:CreateToggle({ Name = 'Movement', Default = true })
+GuardTarget = KickPlayer:CreateDropdown({ Name = 'Guard', List = playerNames('Guards') })
+InmateTarget = KickPlayer:CreateDropdown({ Name = 'Inmates', List = playerNames('Inmates') })
+NeutralTarget = KickPlayer:CreateDropdown({ Name = 'Neutral', List = playerNames('Neutral') })
+CriminalTarget = KickPlayer:CreateDropdown({ Name = 'Criminals', List = playerNames('Criminals') })
 
 refreshTargets()
 
