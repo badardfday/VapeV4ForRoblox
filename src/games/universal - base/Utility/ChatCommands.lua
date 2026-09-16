@@ -388,6 +388,20 @@ ChatCommand = vape.Categories.Utility:CreateModule({
 						end
 					end
 					teleportToAndBack(targetPos, methodOverride)
+				elseif loweredCommand and (loweredCommand == 'addskid' or loweredCommand == 'skid') and prefix then
+					if vape.AddSkid then
+						local name, reason = prefix:match('^(%S+)%s*(.*)$')
+						vape.AddSkid(name, reason ~= '' and reason or nil)
+					else
+						notif('ChatCommand', 'SkidDetector module is not loaded.', 5, 'warning')
+					end
+				elseif loweredCommand and (loweredCommand == 'removeskid' or loweredCommand == 'remskid' or loweredCommand == 'delskid' or loweredCommand == 'unskid') and prefix then
+					if vape.RemoveSkid then
+						local name = prefix:match('^(%S+)')
+						vape.RemoveSkid(name)
+					else
+						notif('ChatCommand', 'SkidDetector module is not loaded.', 5, 'warning')
+					end
 				end
 			end))
 		else
