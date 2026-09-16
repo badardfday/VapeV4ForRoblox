@@ -8,6 +8,7 @@ local tempList = setmetatable({}, {
 local GuardTarget
 local InmateTarget
 local CriminalTarget
+local NeutralTarget
 
 local activeTarget = nil
 local watcherConns = {}
@@ -38,6 +39,7 @@ local function refreshTargets()
 	GuardTarget:Change(playerNames('Guards'))
 	InmateTarget:Change(playerNames('Inmates'))
 	CriminalTarget:Change(playerNames('Criminals'))
+    NeutralTarget:Change(playerNames('Neutral'))
 end
 
 local function findEntity(player)
