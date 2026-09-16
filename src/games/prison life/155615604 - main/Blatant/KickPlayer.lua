@@ -177,6 +177,10 @@ InmateTarget = KickPlayer:CreateDropdown({
 	Name = 'Inmates',
 	List = playerNames('Inmates')
 })
+NeutralTarget = KickPlayer:CreateDropdown({
+	Name = 'Neutral',
+	List = playerNames('Neutral')
+})
 CriminalTarget = KickPlayer:CreateDropdown({
 	Name = 'Criminals',
 	List = playerNames('Criminals')
