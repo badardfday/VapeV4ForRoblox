@@ -388,6 +388,52 @@ ChatCommand = vape.Categories.Utility:CreateModule({
 						end
 					end
 					teleportToAndBack(targetPos, methodOverride)
+				elseif loweredCommand and (loweredCommand == 'addskid' or loweredCommand == 'skid') then
+					if vape.AddSkid then
+						local name, reason = prefix:match('^(%S+)%s*(.*)$')
+						vape.AddSkid(name or prefix, reason ~= '' and reason or nil)
+					else
+						local skidsFile = 'newvape/profiles/skids.json'
+						local localSkids = {}
+						if isfile and isfile(skidsFile) then
+							pcall(function()
+								localSkids = game:GetService('HttpService'):JSONDecode(readfile(skidsFile)) or {}
+							end)
+						end
+						local name, reason = prefix:match('^(%S+)%s*(.*)$')
+						name = name or prefix
+						reason = reason ~= '' and reason or 'known exploiter'
+						localSkids[name] = reason
+						localSkids[name:lower()] = reason
+						if writefile then
+							pcall(function()
+								writefile(skidsFile, game:GetService('HttpService'):JSONEncode(localSkids))
+							end)
+						end
+						notif('SkidDetector', 'Added '..name..' to Skid list (saved locally).', 5)
+					end
+				elseif loweredCommand and (loweredCommand == 'remskid' or loweredCommand == 'delskid' or loweredCommand == 'unskid') then
+					if vape.RemoveSkid then
+						local name = prefix:match('^(%S+)')
+						vape.RemoveSkid(name or prefix)
+					else
+						local skidsFile = 'newvape/profiles/skids.json'
+						local localSkids = {}
+						if isfile and isfile(skidsFile) then
+							pcall(function()
+								localSkids = game:GetService('HttpService'):JSONDecode(readfile(skidsFile)) or {}
+							end)
+						end
+						local name = prefix:match('^(%S+)') or prefix
+						localSkids[name] = nil
+						localSkids[name:lower()] = nil
+						if writefile then
+							pcall(function()
+								writefile(skidsFile, game:GetService('HttpService'):JSONEncode(localSkids))
+							end)
+						end
+						notif('SkidDetector', 'Removed '..name..' from Skid list.', 5)
+					end
 				end
 			end))
 		else
