@@ -12,7 +12,7 @@
 	local watcherConns = {}
 	local dir = 0
 
-	-- [seat] = { target, part, att, ap }
+	-- [seat] = target entity
 	local activeFlings = {}
 	local preSimConn = nil
 
@@ -78,7 +78,6 @@
 		if entity.Humanoid.Sit and entity.Humanoid.SeatPart and entity.Humanoid.SeatPart.Anchored then return false end
 		if not select(2, whitelist:get(entity.Player)) then return false end
 		if entity.Player.Team == teams.Neutral then return false end
-		-- Spawn protection only applies while alive.
 		if entity.Humanoid.Health > 0 and (os.clock() - entity.SpawnTime) <= 5 then return false end
 		return true
 	end
@@ -100,10 +99,8 @@
 		return entity
 	end
 
-	-- Pick the part we anchor the fling to. Alive -> HumanoidRootPart.
-	-- Dead -> a torso/head part so the constraint has something with mass to
-	-- latch onto (HumanoidRootPart of a corpse is often parented out or
-	-- anchored by the time we get here).
+	-- Alive -> HumanoidRootPart. Dead -> torso/head fallback so we still have
+	-- a valid BasePart to aim the seat at.
 	local function getFlingPart(entity)
 		local root = entity.RootPart
 		if not root then return end
@@ -121,10 +118,6 @@
 	end
 
 	local function stopFling(seat)
-		local e = activeFlings[seat]
-		if not e then return end
-		if e.ap then e.ap:Destroy() end
-		if e.att then e.att:Destroy() end
 		activeFlings[seat] = nil
 	end
 
@@ -132,75 +125,39 @@
 		local part = getFlingPart(target)
 		if not part then return end
 
-		stopFling(seat)
-
 		-- Kill the wheels so their mass doesn't eat the velocity
 		local wheels = seat.Parent and seat.Parent.Parent and seat.Parent.Parent:FindFirstChild('Wheels')
 		if wheels then wheels:Destroy() end
 
-		-- Constraint anchor on the seat. We DON'T set CFrame here — the
-		-- AlignPosition does the tracking, preserving physical momentum.
-		local att = Instance.new("Attachment")
-		att.Name = "KickAtt"
-		att.Parent = seat
-
-		local ap = Instance.new("AlignPosition")
-		ap.Name = "KickAlign"
-		ap.Mode = Enum.PositionAlignmentMode.OneAttachment
-		ap.Attachment0 = att
-		ap.MaxForce = math.huge
-		ap.Responsiveness = math.huge           -- effectively teleport-fast tracking
-		ap.Position = part.Position + Vector3.new(-2, -2, -12)
-		ap.Parent = seat
-
-		-- Redirect physics resolution onto the victim so the velocity they
-		-- receive is the seat's, not the seat's own.
-		sethiddenproperty(seat, 'PhysicsRepRootPart', part)
-
-		activeFlings[seat] = {
-			target = target,
-			part = part,
-			att = att,
-			ap = ap,
-		}
+		activeFlings[seat] = target
 	end
 
 	local function startPreSim()
 		if preSimConn then return end
-		preSimConn = runService.PreSimulation:Connect(function(dt)
-			for seat, entry in pairs(activeFlings) do
+		preSimConn = runService.PreSimulation:Connect(function()
+			for seat, target in pairs(activeFlings) do
 				if not seat.Parent then
 					stopFling(seat)
 					continue
 				end
 
-				local target = entry.target
 				if not target or not target.Player or not target.Player.Parent then
 					stopFling(seat)
 					continue
 				end
 
-				-- Swap the anchor part if the target just died (alive part -> corpse part)
-				local newPart = getFlingPart(target)
-				if newPart and newPart ~= entry.part then
-					entry.part = newPart
-					sethiddenproperty(seat, 'PhysicsRepRootPart', newPart)
-				end
-
-				local part = entry.part
+				-- Re-resolve part each step so it swaps to the corpse on death.
+				local part = getFlingPart(target)
 				if not part or not part.Parent then
 					stopFling(seat)
 					continue
 				end
 
-				-- Re-apply every physics step so gravity/friction/damping can't eat it.
+				-- The working fling, re-applied every physics step.
 				seat.AssemblyLinearVelocity = Vector3.new(10000, 10000, 10000)
 				seat.AssemblyAngularVelocity = Vector3.new(50000, 50000, 50000)
-
-				-- Keep the constraint anchored on the (possibly moving) victim.
-				if entry.ap then
-					entry.ap.Position = part.Position + Vector3.new(-2, -2, -12)
-				end
+				seat.CFrame = CFrame.new(part.Position) * CFrame.new(-2, -2, -12)
+				sethiddenproperty(seat, 'PhysicsRepRootPart', part)
 			end
 		end)
 	end
@@ -213,9 +170,7 @@
 	end
 
 	local function clearAllFlings()
-		for seat in pairs(activeFlings) do
-			stopFling(seat)
-		end
+		table.clear(activeFlings)
 	end
 
 	local function clearWatchers()
