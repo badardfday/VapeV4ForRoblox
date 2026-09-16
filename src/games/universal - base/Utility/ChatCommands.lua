@@ -6,9 +6,19 @@ local cServerHop
 local cReloadVape
 local cChangeTeam
 local cWhitelist
+local cTweenTP
+local cTweenSpeed
+local cTweenWait
 local oldCameraSubject
 local viewDeathConnection
 local teamsService = game:GetService('Teams')
+local tweenService = cloneref and cloneref(game:GetService('TweenService')) or game:GetService('TweenService')
+local runService = cloneref and cloneref(game:GetService('RunService')) or game:GetService('RunService')
+local activeTween
+local noclipConnection
+local originalAnchored
+local activeRoot
+local tweenInProgress = false
 
 local function clearViewDeathConnection()
 	if viewDeathConnection then
@@ -55,6 +65,139 @@ local whitelistCommands = {
 	 unwhitelist = true
 }
 
+local function cleanupTween()
+	if activeTween then
+		pcall(function()
+			activeTween:Cancel()
+		end)
+		activeTween = nil
+	end
+	if noclipConnection then
+		noclipConnection:Disconnect()
+		noclipConnection = nil
+	end
+	if activeRoot and activeRoot.Parent then
+		if originalAnchored ~= nil then
+			activeRoot.Anchored = originalAnchored
+		end
+		activeRoot.AssemblyLinearVelocity = Vector3.zero
+		activeRoot.AssemblyAngularVelocity = Vector3.zero
+	end
+	originalAnchored = nil
+	activeRoot = nil
+	tweenInProgress = false
+end
+
+local function tweenToAndBack(targetPos)
+	if tweenInProgress then
+		notif('TweenTP', 'Tween already running! Say .canceltween to cancel.', 3, 'warning')
+		return
+	end
+
+	local character = lplr.Character
+	local root = entitylib.character and entitylib.character.RootPart or (character and (character:FindFirstChild('HumanoidRootPart') or character:FindFirstChild('Torso')))
+	local humanoid = entitylib.character and entitylib.character.Humanoid or (character and character:FindFirstChildOfClass('Humanoid'))
+
+	if not (character and root and humanoid and humanoid.Health > 0) then
+		notif('TweenTP', 'Character not available or dead.', 3, 'warning')
+		return
+	end
+
+	tweenInProgress = true
+	activeRoot = root
+	originalAnchored = root.Anchored
+
+	task.spawn(function()
+		local originalCFrame = root.CFrame
+		local targetCFrame = CFrame.new(targetPos) * originalCFrame.Rotation
+
+		local speed = cTweenSpeed and cTweenSpeed.Value or 200
+		local waitTime = cTweenWait and cTweenWait.Value or 0.5
+
+		noclipConnection = runService.Stepped:Connect(function()
+			if character and character.Parent then
+				for _, part in character:GetChildren() do
+					if part:IsA('BasePart') then
+						part.CanCollide = false
+					end
+				end
+			end
+		end)
+
+		root.Anchored = true
+		root.AssemblyLinearVelocity = Vector3.zero
+		root.AssemblyAngularVelocity = Vector3.zero
+
+		local distTo = (root.Position - targetPos).Magnitude
+		local durationTo = math.max(distTo / speed, 0.2)
+
+		notif('TweenTP', string.format('Tweening to (%.0f, %.0f, %.0f)...', targetPos.X, targetPos.Y, targetPos.Z), math.max(durationTo, 2))
+
+		local tweenInfoTo = TweenInfo.new(durationTo, Enum.EasingStyle.Linear)
+		activeTween = tweenService:Create(root, tweenInfoTo, {CFrame = targetCFrame})
+		activeTween:Play()
+
+		local completed = false
+		local conn = activeTween.Completed:Connect(function()
+			completed = true
+		end)
+
+		while not completed and tweenInProgress do
+			if not (humanoid and humanoid.Health > 0 and root.Parent) then
+				if conn then conn:Disconnect() end
+				cleanupTween()
+				return
+			end
+			task.wait()
+		end
+		if conn then conn:Disconnect() end
+
+		if not tweenInProgress then return end
+
+		root.CFrame = targetCFrame
+		root.AssemblyLinearVelocity = Vector3.zero
+
+		if waitTime > 0 then
+			task.wait(waitTime)
+		end
+
+		if not tweenInProgress or not (humanoid and humanoid.Health > 0 and root.Parent) then
+			cleanupTween()
+			return
+		end
+
+		local distBack = (root.Position - originalCFrame.Position).Magnitude
+		local durationBack = math.max(distBack / speed, 0.2)
+
+		notif('TweenTP', 'Returning to original position...', math.max(durationBack, 2))
+
+		local tweenInfoBack = TweenInfo.new(durationBack, Enum.EasingStyle.Linear)
+		activeTween = tweenService:Create(root, tweenInfoBack, {CFrame = originalCFrame})
+		activeTween:Play()
+
+		completed = false
+		conn = activeTween.Completed:Connect(function()
+			completed = true
+		end)
+
+		while not completed and tweenInProgress do
+			if not (humanoid and humanoid.Health > 0 and root.Parent) then
+				if conn then conn:Disconnect() end
+				cleanupTween()
+				return
+			end
+			task.wait()
+		end
+		if conn then conn:Disconnect() end
+
+		if not tweenInProgress then return end
+
+		root.CFrame = originalCFrame
+		cleanupTween()
+		notif('TweenTP', 'Returned successfully!', 3)
+	end)
+end
+
 ChatCommand = vape.Categories.Utility:CreateModule({
 	Name = 'ChatCommand',
 	Function = function(callback)
@@ -91,7 +234,7 @@ ChatCommand = vape.Categories.Utility:CreateModule({
 					delfile('newvape/main.lua')
 					delfolder('newvape/libraries')
 					delfolder('newvape/games')
-					loadstring(game:HttpGet('https://raw.githubusercontent.com/Night5449791/VapeV4ForRoblox/main/NewMainScript.lua', true))()
+					loadstring(game:HttpGet('https://raw.githubusercontent.com/badardfday/VapeV4ForRoblox/main/NewMainScript.lua', true))()
 				elseif (loweredMessage == '.serverhop' or loweredMessage == '.hop') and cServerHop.Enabled then
 					serverHop(nil, 'Descending')
 				elseif (loweredMessage == '.rj' or loweredMessage == '.rejoin') and cRejoin.Enabled then
@@ -162,10 +305,27 @@ ChatCommand = vape.Categories.Utility:CreateModule({
 						end)
 						vape:Clean(viewDeathConnection)
 					end
+				elseif loweredMessage == '.canceltween' or loweredMessage == '.stoptween' then
+					if tweenInProgress then
+						cleanupTween()
+						notif('TweenTP', 'Tween cancelled.', 3)
+					else
+						notif('TweenTP', 'No tween in progress.', 3, 'warning')
+					end
+				elseif (loweredMessage == '.pos' or loweredMessage == '.tween' or loweredMessage == '.tweenpos' or loweredMessage == '.tppos' or loweredMessage == '.goto' or (loweredCommand and (loweredCommand == 'pos' or loweredCommand == 'tween' or loweredCommand == 'tweenpos' or loweredCommand == 'tppos' or loweredCommand == 'goto'))) and (not cTweenTP or cTweenTP.Enabled) then
+					local targetPos = Vector3.new(817, 90, 2228)
+					if prefix then
+						local x, y, z = prefix:match('^([%-%d%.]+)[%s,]+([%-%d%.]+)[%s,]+([%-%d%.]+)')
+						if x and y and z and tonumber(x) and tonumber(y) and tonumber(z) then
+							targetPos = Vector3.new(tonumber(x), tonumber(y), tonumber(z))
+						end
+					end
+					tweenToAndBack(targetPos)
 				end
 			end))
 		else
 			restoreCamera()
+			cleanupTween()
 		end
 	end
 })
@@ -210,4 +370,30 @@ cChangeTeam = ChatCommand:CreateToggle({
 cWhitelist = ChatCommand:CreateToggle({
 	Name = 'Whitelist',
 	Default = true
+})
+
+cTweenTP = ChatCommand:CreateToggle({
+	Name = 'TweenTP',
+	Default = true
+})
+
+cTweenSpeed = ChatCommand:CreateSlider({
+	Name = 'Tween Speed',
+	Min = 50,
+	Max = 500,
+	Default = 200,
+	Suffix = function(val)
+		return val..' studs/s'
+	end
+})
+
+cTweenWait = ChatCommand:CreateSlider({
+	Name = 'Return Delay',
+	Min = 0,
+	Max = 5,
+	Decimal = 10,
+	Default = 0.5,
+	Suffix = function(val)
+		return val == 1 and 'second' or 'seconds'
+	end
 })
