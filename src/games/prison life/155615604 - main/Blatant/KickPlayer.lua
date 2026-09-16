@@ -12,6 +12,7 @@ local NeutralTarget
 
 local activeTarget = nil
 local watcherConns = {}
+local dir = 0
 
 local function playerNames(teamName)
 	local names = {'None'}
@@ -39,7 +40,7 @@ local function refreshTargets()
 	GuardTarget:Change(playerNames('Guards'))
 	InmateTarget:Change(playerNames('Inmates'))
 	CriminalTarget:Change(playerNames('Criminals'))
-    NeutralTarget:Change(playerNames('Neutral'))
+	NeutralTarget:Change(playerNames('Neutral'))
 end
 
 local function findEntity(player)
@@ -65,8 +66,9 @@ local function getTarget(seat)
 	local targetPlayer = selectedTarget()
 	if not targetPlayer then return end
 
+	-- Same cache style as KickAll: trust the cached entity if it's still live & not seated.
 	local cached = tempList[seat]
-	if cached and cached.Player == targetPlayer and isValidTarget(cached) then
+	if cached and cached.Player == targetPlayer and cached.Health > 0 and not cached.Humanoid.Sit then
 		return cached
 	end
 
@@ -125,36 +127,53 @@ KickPlayer = vape.Categories.Blatant:CreateModule({
 
 			watchTarget(selectedTarget())
 
-			KickPlayer:Clean(runService.Heartbeat:Connect(function()
-				if entitylib.isAlive then
-					local sel = selectedTarget()
-					if sel and sel ~= activeTarget then
-						watchTarget(sel)
-					end
+			KickPlayer:Clean(runService.Heartbeat:Connect(function(dt)
+				if not entitylib.isAlive then return end
 
-					local root = entitylib.character.RootPart
-					if Movement.Enabled and ((root.Position - Vector3.new(633, 98, 2489)).Magnitude < 40 or (os.clock() - entitylib.character.SpawnTime) < 0.4) then
-						root.CFrame = CFrame.new(Vector3.new(612 + math.sin(os.clock() * 1.3) * 12, 90, 2494))
-						root.AssemblyLinearVelocity = Vector3.zero
-					end
+				local sel = selectedTarget()
+				if sel and sel ~= activeTarget then
+					watchTarget(sel)
+				end
 
-					for _, button in workspace.Prison_ITEMS.buttons:GetChildren() do
-						if button.Name == 'Car Spawner' and (button['Car Spawner'].Position - root.Position).Magnitude < 15 and (didClick[button] or 0) < os.clock() then
+				local root = entitylib.character.RootPart
+				local didMove
+
+				-- KickAll's steering: walk toward the cyan Car Spawner and click any spawner in range.
+				for _, button in workspace.Prison_ITEMS.buttons:GetChildren() do
+					if button.Name == 'Car Spawner' then
+						local mag = (button['Car Spawner'].Position - root.Position).Magnitude
+						if mag < 15 and (didClick[button] or 0) < os.clock() then
 							didClick[button] = os.clock() + 0.2
 							task.spawn(function()
 								replicatedStorage.Remotes.InteractWithItem:InvokeServer(button['Car Spawner'])
 							end)
 						end
-					end
 
-					if selectedTarget() then
-						for _, seat in workspace.CarContainer:QueryDescendants('VehicleSeat') do
-							if isnetworkowner(seat) then
-								local target = getTarget(seat)
-								if target then
-									flingSeat(seat, target)
-								end
-							end
+						if mag < 50 and button['Car Spawner'].BrickColor == BrickColor.new('Cyan') and not didMove then
+							local diff = math.clamp((button['Car Spawner'].Position - root.Position).X, -1, 1)
+							dir = math.clamp(dir + (diff * dt * 26), -12, 14)
+							didMove = true
+						end
+					end
+				end
+
+				if not didMove then
+					local diff = math.clamp(0 - dir, -1, 1)
+					dir = math.clamp(dir + (diff * dt * 26), -12, 14)
+				end
+
+				if Movement.Enabled and ((root.Position - Vector3.new(633, 98, 2489)).Magnitude < 40 or (os.clock() - entitylib.character.SpawnTime) < 0.4) then
+					root.CFrame = CFrame.new(Vector3.new(610 + dir, 90, 2494))
+					root.AssemblyLinearVelocity = Vector3.zero
+				end
+
+				if not selectedTarget() then return end
+
+				for _, seat in workspace.CarContainer:QueryDescendants('VehicleSeat') do
+					if isnetworkowner(seat) then
+						local target = getTarget(seat)
+						if target then
+							flingSeat(seat, target)
 						end
 					end
 				end
