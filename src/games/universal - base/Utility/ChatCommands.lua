@@ -6,19 +6,17 @@ local cServerHop
 local cReloadVape
 local cChangeTeam
 local cWhitelist
-local cTweenTP
-local cTweenSpeed
-local cTweenWait
+local cPosTP
+local cTPMethod
+local cTPSpeed
+local cTPWait
 local oldCameraSubject
 local viewDeathConnection
 local teamsService = game:GetService('Teams')
-local tweenService = cloneref and cloneref(game:GetService('TweenService')) or game:GetService('TweenService')
 local runService = cloneref and cloneref(game:GetService('RunService')) or game:GetService('RunService')
-local activeTween
 local noclipConnection
-local originalAnchored
 local activeRoot
-local tweenInProgress = false
+local tpInProgress = false
 
 local function clearViewDeathConnection()
 	if viewDeathConnection then
@@ -65,32 +63,106 @@ local whitelistCommands = {
 	 unwhitelist = true
 }
 
-local function cleanupTween()
-	if activeTween then
-		pcall(function()
-			activeTween:Cancel()
-		end)
-		activeTween = nil
-	end
+local motorMove = motorMove or function(target, cf)
+	local part = Instance.new('Part')
+	part.Anchored = true
+	part.Parent = workspace
+	local motor = Instance.new('Motor6D')
+	motor.Part0 = target
+	motor.Part1 = part
+	motor.C1 = cf
+	motor.Parent = part
+	task.delay(0, part.Destroy, part)
+end
+
+local function cleanupTP()
 	if noclipConnection then
 		noclipConnection:Disconnect()
 		noclipConnection = nil
 	end
 	if activeRoot and activeRoot.Parent then
-		if originalAnchored ~= nil then
-			activeRoot.Anchored = originalAnchored
-		end
 		activeRoot.AssemblyLinearVelocity = Vector3.zero
 		activeRoot.AssemblyAngularVelocity = Vector3.zero
 	end
-	originalAnchored = nil
 	activeRoot = nil
-	tweenInProgress = false
+	tpInProgress = false
 end
 
-local function tweenToAndBack(targetPos)
-	if tweenInProgress then
-		notif('TweenTP', 'Tween already running! Say .canceltween to cancel.', 3, 'warning')
+local function lerpStepTo(root, humanoid, destinationPos, speed)
+	local reached = false
+	local connection
+	connection = runService.PreSimulation:Connect(function(dt)
+		if not (humanoid and humanoid.Health > 0 and root and root.Parent and tpInProgress) then
+			if connection then connection:Disconnect() end
+			return
+		end
+
+		local currentPos = root.Position
+		local diff = destinationPos - currentPos
+		local dist = diff.Magnitude
+
+		if dist <= 3 then
+			root.CFrame = CFrame.lookAlong(destinationPos, root.CFrame.LookVector)
+			root.AssemblyLinearVelocity = Vector3.zero
+			reached = true
+			if connection then connection:Disconnect() end
+			return
+		end
+
+		local step = math.min(dist, speed * dt)
+		root.CFrame = root.CFrame + (diff.Unit * step)
+		root.AssemblyLinearVelocity = Vector3.zero
+	end)
+
+	while not reached and tpInProgress do
+		if not (humanoid and humanoid.Health > 0 and root and root.Parent) then
+			if connection then connection:Disconnect() end
+			return false
+		end
+		task.wait()
+	end
+	if connection then connection:Disconnect() end
+	return reached
+end
+
+local function velocityStepTo(root, humanoid, destinationPos, speed)
+	local reached = false
+	local connection
+	connection = runService.PreSimulation:Connect(function()
+		if not (humanoid and humanoid.Health > 0 and root and root.Parent and tpInProgress) then
+			if connection then connection:Disconnect() end
+			return
+		end
+
+		local currentPos = root.Position
+		local diff = destinationPos - currentPos
+		local dist = diff.Magnitude
+
+		if dist <= 6 then
+			root.CFrame = CFrame.lookAlong(destinationPos, root.CFrame.LookVector)
+			root.AssemblyLinearVelocity = Vector3.zero
+			reached = true
+			if connection then connection:Disconnect() end
+			return
+		end
+
+		root.AssemblyLinearVelocity = diff.Unit * speed
+	end)
+
+	while not reached and tpInProgress do
+		if not (humanoid and humanoid.Health > 0 and root and root.Parent) then
+			if connection then connection:Disconnect() end
+			return false
+		end
+		task.wait()
+	end
+	if connection then connection:Disconnect() end
+	return reached
+end
+
+local function teleportToAndBack(targetPos, methodOverride)
+	if tpInProgress then
+		notif('PosTP', 'Teleport already in progress! Say .canceltp to cancel.', 3, 'warning')
 		return
 	end
 
@@ -99,20 +171,20 @@ local function tweenToAndBack(targetPos)
 	local humanoid = entitylib.character and entitylib.character.Humanoid or (character and character:FindFirstChildOfClass('Humanoid'))
 
 	if not (character and root and humanoid and humanoid.Health > 0) then
-		notif('TweenTP', 'Character not available or dead.', 3, 'warning')
+		notif('PosTP', 'Character not available or dead.', 3, 'warning')
 		return
 	end
 
-	tweenInProgress = true
+	local method = methodOverride or (cTPMethod and cTPMethod.Value or 'Lerp')
+	local speed = cTPSpeed and cTPSpeed.Value or 300
+	local waitTime = cTPWait and cTPWait.Value or 0.5
+
+	tpInProgress = true
 	activeRoot = root
-	originalAnchored = root.Anchored
 
 	task.spawn(function()
 		local originalCFrame = root.CFrame
 		local targetCFrame = CFrame.new(targetPos) * originalCFrame.Rotation
-
-		local speed = cTweenSpeed and cTweenSpeed.Value or 200
-		local waitTime = cTweenWait and cTweenWait.Value or 0.5
 
 		noclipConnection = runService.Stepped:Connect(function()
 			if character and character.Parent then
@@ -124,35 +196,27 @@ local function tweenToAndBack(targetPos)
 			end
 		end)
 
-		root.Anchored = true
-		root.AssemblyLinearVelocity = Vector3.zero
-		root.AssemblyAngularVelocity = Vector3.zero
+		notif('PosTP', string.format('[%s] Moving to (%.0f, %.0f, %.0f)...', method, targetPos.X, targetPos.Y, targetPos.Z), 3)
 
-		local distTo = (root.Position - targetPos).Magnitude
-		local durationTo = math.max(distTo / speed, 0.2)
-
-		notif('TweenTP', string.format('Tweening to (%.0f, %.0f, %.0f)...', targetPos.X, targetPos.Y, targetPos.Z), math.max(durationTo, 2))
-
-		local tweenInfoTo = TweenInfo.new(durationTo, Enum.EasingStyle.Linear)
-		activeTween = tweenService:Create(root, tweenInfoTo, {CFrame = targetCFrame})
-		activeTween:Play()
-
-		local completed = false
-		local conn = activeTween.Completed:Connect(function()
-			completed = true
-		end)
-
-		while not completed and tweenInProgress do
-			if not (humanoid and humanoid.Health > 0 and root.Parent) then
-				if conn then conn:Disconnect() end
-				cleanupTween()
-				return
-			end
-			task.wait()
+		local success = false
+		if method == 'CFrame' then
+			root.CFrame = targetCFrame
+			root.AssemblyLinearVelocity = Vector3.zero
+			success = true
+		elseif method == 'Motor' then
+			motorMove(root, targetCFrame)
+			root.AssemblyLinearVelocity = Vector3.zero
+			success = true
+		elseif method == 'Velocity' then
+			success = velocityStepTo(root, humanoid, targetPos, speed)
+		else
+			success = lerpStepTo(root, humanoid, targetPos, speed)
 		end
-		if conn then conn:Disconnect() end
 
-		if not tweenInProgress then return end
+		if not success or not tpInProgress or not (humanoid and humanoid.Health > 0 and root.Parent) then
+			cleanupTP()
+			return
+		end
 
 		root.CFrame = targetCFrame
 		root.AssemblyLinearVelocity = Vector3.zero
@@ -161,40 +225,31 @@ local function tweenToAndBack(targetPos)
 			task.wait(waitTime)
 		end
 
-		if not tweenInProgress or not (humanoid and humanoid.Health > 0 and root.Parent) then
-			cleanupTween()
+		if not tpInProgress or not (humanoid and humanoid.Health > 0 and root.Parent) then
+			cleanupTP()
 			return
 		end
 
-		local distBack = (root.Position - originalCFrame.Position).Magnitude
-		local durationBack = math.max(distBack / speed, 0.2)
+		notif('PosTP', string.format('[%s] Returning to start position...', method), 3)
 
-		notif('TweenTP', 'Returning to original position...', math.max(durationBack, 2))
-
-		local tweenInfoBack = TweenInfo.new(durationBack, Enum.EasingStyle.Linear)
-		activeTween = tweenService:Create(root, tweenInfoBack, {CFrame = originalCFrame})
-		activeTween:Play()
-
-		completed = false
-		conn = activeTween.Completed:Connect(function()
-			completed = true
-		end)
-
-		while not completed and tweenInProgress do
-			if not (humanoid and humanoid.Health > 0 and root.Parent) then
-				if conn then conn:Disconnect() end
-				cleanupTween()
-				return
-			end
-			task.wait()
+		if method == 'CFrame' then
+			root.CFrame = originalCFrame
+			root.AssemblyLinearVelocity = Vector3.zero
+		elseif method == 'Motor' then
+			motorMove(root, originalCFrame)
+			root.AssemblyLinearVelocity = Vector3.zero
+		elseif method == 'Velocity' then
+			velocityStepTo(root, humanoid, originalCFrame.Position, speed)
+		else
+			lerpStepTo(root, humanoid, originalCFrame.Position, speed)
 		end
-		if conn then conn:Disconnect() end
 
-		if not tweenInProgress then return end
+		if tpInProgress and root and root.Parent then
+			root.CFrame = originalCFrame
+		end
 
-		root.CFrame = originalCFrame
-		cleanupTween()
-		notif('TweenTP', 'Returned successfully!', 3)
+		cleanupTP()
+		notif('PosTP', 'Returned successfully!', 3)
 	end)
 end
 
@@ -305,27 +360,39 @@ ChatCommand = vape.Categories.Utility:CreateModule({
 						end)
 						vape:Clean(viewDeathConnection)
 					end
-				elseif loweredMessage == '.canceltween' or loweredMessage == '.stoptween' then
-					if tweenInProgress then
-						cleanupTween()
-						notif('TweenTP', 'Tween cancelled.', 3)
+				elseif loweredMessage == '.canceltp' or loweredMessage == '.stoptp' or loweredMessage == '.canceltween' or loweredMessage == '.stoptween' or loweredMessage == '.cancel' then
+					if tpInProgress then
+						cleanupTP()
+						notif('PosTP', 'Teleport cancelled.', 3)
 					else
-						notif('TweenTP', 'No tween in progress.', 3, 'warning')
+						notif('PosTP', 'No teleport in progress.', 3, 'warning')
 					end
-				elseif (loweredMessage == '.pos' or loweredMessage == '.tween' or loweredMessage == '.tweenpos' or loweredMessage == '.tppos' or loweredMessage == '.goto' or (loweredCommand and (loweredCommand == 'pos' or loweredCommand == 'tween' or loweredCommand == 'tweenpos' or loweredCommand == 'tppos' or loweredCommand == 'goto'))) and (not cTweenTP or cTweenTP.Enabled) then
+				elseif (loweredMessage == '.pos' or loweredMessage == '.tp2' or loweredMessage == '.tppos' or loweredMessage == '.goto' or loweredMessage == '.tween' or loweredMessage == '.tweenpos' or (loweredCommand and (loweredCommand == 'pos' or loweredCommand == 'tp2' or loweredCommand == 'tppos' or loweredCommand == 'goto' or loweredCommand == 'tween' or loweredCommand == 'tweenpos'))) and (not cPosTP or cPosTP.Enabled) then
 					local targetPos = Vector3.new(817, 90, 2228)
+					local methodOverride = nil
 					if prefix then
-						local x, y, z = prefix:match('^([%-%d%.]+)[%s,]+([%-%d%.]+)[%s,]+([%-%d%.]+)')
+						local loweredPrefix = prefix:lower()
+						if loweredPrefix:find('cframe') then
+							methodOverride = 'CFrame'
+						elseif loweredPrefix:find('motor') then
+							methodOverride = 'Motor'
+						elseif loweredPrefix:find('velo') then
+							methodOverride = 'Velocity'
+						elseif loweredPrefix:find('lerp') or loweredPrefix:find('step') then
+							methodOverride = 'Lerp'
+						end
+
+						local x, y, z = prefix:match('([%-%d%.]+)[%s,]+([%-%d%.]+)[%s,]+([%-%d%.]+)')
 						if x and y and z and tonumber(x) and tonumber(y) and tonumber(z) then
 							targetPos = Vector3.new(tonumber(x), tonumber(y), tonumber(z))
 						end
 					end
-					tweenToAndBack(targetPos)
+					teleportToAndBack(targetPos, methodOverride)
 				end
 			end))
 		else
 			restoreCamera()
-			cleanupTween()
+			cleanupTP()
 		end
 	end
 })
@@ -372,22 +439,27 @@ cWhitelist = ChatCommand:CreateToggle({
 	Default = true
 })
 
-cTweenTP = ChatCommand:CreateToggle({
-	Name = 'TweenTP',
+cPosTP = ChatCommand:CreateToggle({
+	Name = 'PosTP',
 	Default = true
 })
 
-cTweenSpeed = ChatCommand:CreateSlider({
-	Name = 'Tween Speed',
+cTPMethod = ChatCommand:CreateDropdown({
+	Name = 'TP Method',
+	List = {'Lerp', 'CFrame', 'Motor', 'Velocity'}
+})
+
+cTPSpeed = ChatCommand:CreateSlider({
+	Name = 'TP Speed',
 	Min = 50,
-	Max = 500,
-	Default = 200,
+	Max = 1000,
+	Default = 300,
 	Suffix = function(val)
 		return val..' studs/s'
 	end
 })
 
-cTweenWait = ChatCommand:CreateSlider({
+cTPWait = ChatCommand:CreateSlider({
 	Name = 'Return Delay',
 	Min = 0,
 	Max = 5,
