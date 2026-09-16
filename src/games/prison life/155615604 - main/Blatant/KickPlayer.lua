@@ -12,10 +12,6 @@ local CriminalTarget
 local activeTarget = nil
 local watcherConns = {}
 
-local FLING_VELOCITY = 100000
-local FLING_ANGULAR  = 5000
-local REAPPLY_TICKS  = 3
-
 local function playerNames(teamName)
 	local names = {'None'}
 	for _, player in playersService:GetPlayers() do
@@ -80,40 +76,12 @@ local function getTarget(seat)
 	return entity
 end
 
-local function hardFling(seat, target)
-	local randX = math.random(-1, 1)
-	local randZ = math.random(-1, 1)
-	local vel = Vector3.new(
-		FLING_VELOCITY * (randX == 0 and 1 or randX),
-		FLING_VELOCITY,
-		FLING_VELOCITY * (randZ == 0 and 1 or randZ)
-	)
-	local ang = Vector3.new(
-		FLING_ANGULAR * (math.random() > 0.5 and 1 or -1),
-		FLING_ANGULAR,
-		FLING_ANGULAR * (math.random() > 0.5 and 1 or -1)
-	)
-
-	seat.CFrame = CFrame.new(target.RootPart.Position) * CFrame.Angles(
-		math.random() * math.pi * 2,
-		math.random() * math.pi * 2,
-		math.random() * math.pi * 2
-	)
+local function flingSeat(seat, target)
+	seat.AssemblyLinearVelocity = Vector3.new(10000, 10000, 0)
+	seat.CFrame = CFrame.new(target.RootPart.Position) * CFrame.new(-2, -2, -12)
 	sethiddenproperty(seat, 'PhysicsRepRootPart', target.RootPart)
 
-	seat.AssemblyLinearVelocity  = vel
-	seat.AssemblyAngularVelocity = ang
-
-	task.spawn(function()
-		for _ = 1, REAPPLY_TICKS do
-			if not seat or not seat.Parent then break end
-			seat.AssemblyLinearVelocity  = vel
-			seat.AssemblyAngularVelocity = ang
-			runService.Heartbeat:Wait()
-		end
-	end)
-
-	local wheels = seat.Parent and seat.Parent.Parent and seat.Parent.Parent:FindFirstChild('Wheels')
+	local wheels = seat.Parent.Parent:FindFirstChild('Wheels')
 	if wheels then
 		wheels:Destroy()
 	end
@@ -182,7 +150,7 @@ KickPlayer = vape.Categories.Blatant:CreateModule({
 							if isnetworkowner(seat) then
 								local target = getTarget(seat)
 								if target then
-									hardFling(seat, target)
+									flingSeat(seat, target)
 								end
 							end
 						end
