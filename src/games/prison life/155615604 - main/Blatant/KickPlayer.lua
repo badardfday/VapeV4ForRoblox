@@ -1,4 +1,4 @@
-local KickAll
+local KickPlayer
 local Movement
 local didClick = {}
 local tempList = setmetatable({}, {
@@ -69,19 +69,19 @@ local function getTarget(seat)
 	if not isValidTarget(entity) then return end
 
 	tempList[seat] = entity
-	notif('KickAll', 'Attempted fling: '..entity.Player.Name, 5)
+	notif('KickPlayer', 'Attempted fling: '..entity.Player.Name, 5)
 	return entity
 end
 
-KickAll = vape.Categories.Blatant:CreateModule({
-	Name = 'KickAll',
+KickPlayer = vape.Categories.Blatant:CreateModule({
+	Name = 'KickPlayer',
 	Function = function(callback)
 		if callback then
 			if not vape.Modules.AntiFling.Enabled then
 				vape.Modules.AntiFling:Toggle()
 			end
 
-			KickAll:Clean(runService.Heartbeat:Connect(function()
+			KickPlayer:Clean(runService.Heartbeat:Connect(function()
 				if entitylib.isAlive then
 					local root = entitylib.character.RootPart
 					if Movement.Enabled and ((root.Position - Vector3.new(633, 98, 2489)).Magnitude < 40 or (os.clock() - entitylib.character.SpawnTime) < 0.4) then
@@ -122,20 +122,20 @@ KickAll = vape.Categories.Blatant:CreateModule({
 	Tooltip = 'aesthetical, just remove collisions on vehicles please, this is the worst.'
 })
 
-Movement = KickAll:CreateToggle({
+Movement = KickPlayer:CreateToggle({
 	Name = 'Movement',
 	Default = true
 })
 
-GuardTarget = KickAll:CreateDropdown({
+GuardTarget = KickPlayer:CreateDropdown({
 	Name = 'Guard',
 	List = playerNames('Guards')
 })
-InmateTarget = KickAll:CreateDropdown({
+InmateTarget = KickPlayer:CreateDropdown({
 	Name = 'Inmates',
 	List = playerNames('Inmates')
 })
-CriminalTarget = KickAll:CreateDropdown({
+CriminalTarget = KickPlayer:CreateDropdown({
 	Name = 'Criminals',
 	List = playerNames('Criminals')
 })
