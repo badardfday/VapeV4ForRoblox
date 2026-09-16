@@ -119,7 +119,7 @@ KickPlayer = vape.Categories.Blatant:CreateModule({
 			end))
 		end
 	end,
-	Tooltip = 'aesthetical, just remove collisions on vehicles please, this is the worst.'
+	Tooltip = 'Kicks player specifically.'
 })
 
 Movement = KickPlayer:CreateToggle({
