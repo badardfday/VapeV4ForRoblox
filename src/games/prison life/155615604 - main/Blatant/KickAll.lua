@@ -42,6 +42,20 @@ KickAll = vape.Categories.Blatant:CreateModule({
 				vape.Modules.AntiFling:Toggle()
 			end
 
+			local spawnPos = Vector3.new(616, 97, 2494)
+
+			if entitylib.isAlive then
+				entitylib.character.RootPart.CFrame = CFrame.new(spawnPos)
+				entitylib.character.RootPart.AssemblyLinearVelocity = Vector3.zero
+			end
+
+			KickAll:Clean(entitylib.Events.LocalAdded:Connect(function(char)
+				if char and char.RootPart and KickAll.Enabled then
+					char.RootPart.CFrame = CFrame.new(spawnPos)
+					char.RootPart.AssemblyLinearVelocity = Vector3.zero
+				end
+			end))
+
 			local reqTimer = os.clock()
 			local startTime = os.clock()
 			local dir = 0
@@ -75,6 +89,13 @@ KickAll = vape.Categories.Blatant:CreateModule({
 
 				if entitylib.isAlive then
 					local root = entitylib.character.RootPart
+
+					if (root.Position - spawnPos).Magnitude > 35 then
+						root.CFrame = CFrame.new(spawnPos)
+						root.AssemblyLinearVelocity = Vector3.zero
+						return
+					end
+
 					local didMove
 
 					for _, button in workspace.Prison_ITEMS.buttons:GetChildren() do
@@ -100,8 +121,8 @@ KickAll = vape.Categories.Blatant:CreateModule({
 						dir = math.clamp(dir + (diff * dt * 26), -12, 14)
 					end
 
-					if Movement.Enabled and ((root.Position - Vector3.new(633, 98, 2489)).Magnitude < 40 or (os.clock() - entitylib.character.SpawnTime) < 0.4) then
-						root.CFrame = CFrame.new(Vector3.new(610 + dir, 90, 2494))
+					if Movement.Enabled then
+						root.CFrame = CFrame.new(Vector3.new(616 + dir, 97, 2494))
 						root.AssemblyLinearVelocity = Vector3.zero
 					end
 

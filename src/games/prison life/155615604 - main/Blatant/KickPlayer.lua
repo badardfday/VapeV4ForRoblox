@@ -125,6 +125,20 @@ KickPlayer = vape.Categories.Blatant:CreateModule({
 				vape.Modules.AntiFling:Toggle()
 			end
 
+			local spawnPos = Vector3.new(616, 97, 2494)
+
+			if entitylib.isAlive then
+				entitylib.character.RootPart.CFrame = CFrame.new(spawnPos)
+				entitylib.character.RootPart.AssemblyLinearVelocity = Vector3.zero
+			end
+
+			KickPlayer:Clean(entitylib.Events.LocalAdded:Connect(function(char)
+				if char and char.RootPart and KickPlayer.Enabled then
+					char.RootPart.CFrame = CFrame.new(spawnPos)
+					char.RootPart.AssemblyLinearVelocity = Vector3.zero
+				end
+			end))
+
 			watchTarget(selectedTarget())
 
 			KickPlayer:Clean(runService.Heartbeat:Connect(function(dt)
@@ -136,6 +150,13 @@ KickPlayer = vape.Categories.Blatant:CreateModule({
 				end
 
 				local root = entitylib.character.RootPart
+
+				if (root.Position - spawnPos).Magnitude > 35 then
+					root.CFrame = CFrame.new(spawnPos)
+					root.AssemblyLinearVelocity = Vector3.zero
+					return
+				end
+
 				local didMove
 
 				-- KickAll's steering: walk toward the cyan Car Spawner and click any spawner in range.
@@ -162,8 +183,8 @@ KickPlayer = vape.Categories.Blatant:CreateModule({
 					dir = math.clamp(dir + (diff * dt * 26), -12, 14)
 				end
 
-				if Movement.Enabled and ((root.Position - Vector3.new(633, 98, 2489)).Magnitude < 40 or (os.clock() - entitylib.character.SpawnTime) < 0.4) then
-					root.CFrame = CFrame.new(Vector3.new(610 + dir, 90, 2494))
+				if Movement.Enabled then
+					root.CFrame = CFrame.new(Vector3.new(616 + dir, 97, 2494))
 					root.AssemblyLinearVelocity = Vector3.zero
 				end
 
