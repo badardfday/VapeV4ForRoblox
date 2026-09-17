@@ -105,8 +105,6 @@ local function getFlingPart(entity)
 		or root
 end
 
--- Make the whole vehicle one rigid mass by cranking every joint under it.
--- This is what lets the ram method push a corpse without wheels snapping off.
 local function stiffenVehicle(seat)
 	local vehicle = seat.Parent and seat.Parent.Parent
 	if not vehicle then return end
@@ -139,14 +137,11 @@ local function flingSeat(seat, target)
 	local isDead = target.Humanoid and target.Humanoid.Health <= 0
 
 	if isDead then
-		-- Corpse: no PhysicsRepRootPart redirect (server owns the corpse, will
-		-- reject it). Instead stiffen the vehicle and ram physically.
 		stiffenVehicle(seat)
 		seat.AssemblyLinearVelocity = Vector3.new(10000, 10000, 10000)
 		seat.AssemblyAngularVelocity = Vector3.new(20000, 20000, 20000)
 		seat.CFrame = CFrame.new(part.Position) * CFrame.new(-2, -2, -12)
 	else
-		-- Alive: your working fling, unchanged.
 		seat.AssemblyLinearVelocity = Vector3.new(10000, 10000, 0)
 		seat.CFrame = CFrame.new(part.Position) * CFrame.new(-2, -2, -12)
 		sethiddenproperty(seat, 'PhysicsRepRootPart', part)
