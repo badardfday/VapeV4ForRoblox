@@ -7,6 +7,15 @@ local tempList = setmetatable({}, {
 	__mode = 'k'
 })
 
+local function hasNetworkOwnership(seat)
+	if not seat:IsDescendantOf(workspace) then
+		return false
+	end
+
+	local ok, owned = pcall(isnetworkowner, seat)
+	return ok and owned == true
+end
+
 local function getTarget(seat)
 	if tempList[seat] and tempList[seat].Health > 0 and not tempList[seat].Humanoid.Sit then
 		return tempList[seat]
@@ -106,14 +115,15 @@ KickAll = vape.Categories.Blatant:CreateModule({
 					end
 
 					for _, seat in workspace.CarContainer:QueryDescendants('VehicleSeat') do
-						if isnetworkowner(seat) then
+						if hasNetworkOwnership(seat) then
 							local target = getTarget(seat)
 							if target then
+								sethiddenproperty(seat, 'PhysicsRepRootPart', target.RootPart)
 								seat.AssemblyLinearVelocity = Vector3.new(10000, 10000, 0)
 								seat.CFrame = CFrame.new(target.RootPart.Position) * CFrame.new(-2, -2, -12)
-								sethiddenproperty(seat, 'PhysicsRepRootPart', target.RootPart)
 
-								local wheels = seat.Parent.Parent:FindFirstChild('Wheels')
+								local vehicle = seat.Parent and seat.Parent.Parent
+								local wheels = vehicle and vehicle:FindFirstChild('Wheels')
 								if wheels then
 									wheels:Destroy()
 								end
