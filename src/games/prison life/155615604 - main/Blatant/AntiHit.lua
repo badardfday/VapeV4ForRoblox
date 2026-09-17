@@ -31,7 +31,7 @@ AntiHit = vape.Categories.Blatant:CreateModule({
                 runService:UnbindFromRenderStep(renderStepKey)
             end)
 
-            AntiHit:Clean(runService.PostSimulation:Connect(function()
+            AntiHit:Clean(runService.PreSimulation:Connect(function()
                 if entitylib.isAlive then
                     local root = entitylib.character.RootPart
                     oldRoot = root
@@ -42,8 +42,14 @@ AntiHit = vape.Categories.Blatant:CreateModule({
                     root.CFrame += offset
 
                     if root.Position.Y > 179.99 then
-                        root.CFrame = root.CFrame - Vector3.new(0, root.Position.Y - 179.99, 0)
+                        root.CFrame -= Vector3.new(0, root.Position.Y - 179.99, 0)
                     end
+                end
+            end))
+
+            AntiHit:Clean(runService.PostSimulation:Connect(function()
+                if entitylib.isAlive and oldCF and entitylib.character.RootPart == oldRoot then
+                    entitylib.character.RootPart.CFrame = oldCF
                 end
             end))
         else
