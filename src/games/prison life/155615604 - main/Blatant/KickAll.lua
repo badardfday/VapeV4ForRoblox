@@ -16,8 +16,70 @@ local function hasNetworkOwnership(seat)
 	return ok and owned == true
 end
 
+local function getFlingPart(entity)
+	local root = entity.RootPart
+	if not root then return end
+	if entity.Humanoid and entity.Humanoid.Health > 0 then
+		return root
+	end
+
+	local character = root.Parent
+	return character and (character:FindFirstChild('UpperTorso')
+		or character:FindFirstChild('Torso')
+		or character:FindFirstChild('Head')
+		or root) or root
+end
+
+local function stiffenVehicle(seat)
+	local vehicle = seat.Parent and seat.Parent.Parent
+	if not vehicle then return end
+
+	for _, descendant in vehicle:GetDescendants() do
+		if descendant:IsA('Motor6D') then
+			pcall(function() descendant.MaxForce = math.huge end)
+			pcall(function() descendant.MaxTorque = math.huge end)
+		elseif descendant:IsA('HingeConstraint')
+			or descendant:IsA('CylindricalConstraint')
+			or descendant:IsA('BallSocketConstraint')
+			or descendant:IsA('PrismaticConstraint')
+			or descendant:IsA('AlignPosition')
+			or descendant:IsA('AlignOrientation')
+		then
+			pcall(function() descendant.MaxForce = math.huge end)
+			pcall(function() descendant.MaxTorque = math.huge end)
+			pcall(function() descendant.MaxVelocity = math.huge end)
+			pcall(function() descendant.Responsiveness = math.huge end)
+		elseif descendant:IsA('Weld') or descendant:IsA('WeldConstraint') then
+			pcall(function() descendant.Enabled = true end)
+		end
+	end
+end
+
+local function flingSeat(seat, target)
+	local part = getFlingPart(target)
+	if not part then return end
+
+	if target.Humanoid and target.Humanoid.Health <= 0 then
+		stiffenVehicle(seat)
+		seat.AssemblyLinearVelocity = Vector3.new(10000, 10000, 10000)
+		seat.AssemblyAngularVelocity = Vector3.new(20000, 20000, 20000)
+		seat.CFrame = CFrame.new(part.Position) * CFrame.new(-2, -2, -12)
+		return
+	end
+
+	sethiddenproperty(seat, 'PhysicsRepRootPart', part)
+	seat.AssemblyLinearVelocity = Vector3.new(10000, 10000, 0)
+	seat.CFrame = CFrame.new(part.Position) * CFrame.new(-2, -2, -12)
+
+	local vehicle = seat.Parent and seat.Parent.Parent
+	local wheels = vehicle and vehicle:FindFirstChild('Wheels')
+	if wheels then
+		wheels:Destroy()
+	end
+end
+
 local function getTarget(seat)
-	if tempList[seat] and tempList[seat].Health > 0 and not tempList[seat].Humanoid.Sit then
+	if tempList[seat] and tempList[seat].Humanoid and not tempList[seat].Humanoid.Sit then
 		return tempList[seat]
 	end
 
@@ -30,7 +92,7 @@ local function getTarget(seat)
 		for _, entity in cloned do
 			if not select(2, whitelist:get(entity.Player)) then continue end
 			if entity.Player.Team == teams.Neutral then continue end
-			if not (entity.Humanoid.Sit and entity.Humanoid.SeatPart.Anchored) and entity.Humanoid.Health > 0 and (os.clock() - entity.SpawnTime) > 5 then
+			if not (entity.Humanoid.Sit and entity.Humanoid.SeatPart.Anchored) and (os.clock() - entity.SpawnTime) > 5 then
 				lastFling[entity.Player.Name] = os.clock()
 				tempList[seat] = entity
 				table.clear(cloned)
@@ -118,15 +180,7 @@ KickAll = vape.Categories.Blatant:CreateModule({
 						if hasNetworkOwnership(seat) then
 							local target = getTarget(seat)
 							if target then
-								sethiddenproperty(seat, 'PhysicsRepRootPart', target.RootPart)
-								seat.AssemblyLinearVelocity = Vector3.new(10000, 10000, 0)
-								seat.CFrame = CFrame.new(target.RootPart.Position) * CFrame.new(-2, -2, -12)
-
-								local vehicle = seat.Parent and seat.Parent.Parent
-								local wheels = vehicle and vehicle:FindFirstChild('Wheels')
-								if wheels then
-									wheels:Destroy()
-								end
+								flingSeat(seat, target)
 							end
 						end
 					end
