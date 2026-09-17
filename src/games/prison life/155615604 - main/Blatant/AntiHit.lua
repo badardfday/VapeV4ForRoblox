@@ -1,7 +1,6 @@
 local AntiHit
 local Intensity
 local oldCF
-local oldVelocity
 local oldRoot
 local oldFallenHeight
 local renderStepKey = 'AntiHit_' .. tostring(math.random(100000, 999999))
@@ -11,7 +10,6 @@ AntiHit = vape.Categories.Blatant:CreateModule({
     Function = function(callback)
         if callback then
             oldCF = nil
-            oldVelocity = nil
             oldFallenHeight = workspace.FallenPartsDestroyHeight
             workspace.FallenPartsDestroyHeight = -math.huge
 
@@ -20,16 +18,12 @@ AntiHit = vape.Categories.Blatant:CreateModule({
                     local root = entitylib.character.RootPart
                     if root ~= oldRoot then
                         oldCF = nil
-                        oldVelocity = nil
                         oldRoot = root
                     end
                 end
                 if entitylib.isAlive and oldCF and entitylib.character.RootPart == oldRoot then
                     local root = entitylib.character.RootPart
                     root.CFrame = oldCF
-                    if oldVelocity then
-                        root.AssemblyLinearVelocity = oldVelocity
-                    end
                 end
             end)
 
@@ -42,15 +36,13 @@ AntiHit = vape.Categories.Blatant:CreateModule({
                     local root = entitylib.character.RootPart
                     oldRoot = root
                     oldCF = root.CFrame
-                    oldVelocity = root.AssemblyLinearVelocity
-                    local jitter = (math.random() - 0.5) * 2 * Intensity.Value
-                    root.CFrame += Vector3.new(0, jitter, 0)
+                    local radius = math.random() * Intensity.Value
+                    local angle = math.random() * math.pi * 2
+                    local offset = Vector3.new(math.cos(angle) * radius, (math.random() - 0.5) * radius, math.sin(angle) * radius)
+                    root.CFrame += offset
 
                     if root.Position.Y > 179.99 then
                         root.CFrame = root.CFrame - Vector3.new(0, root.Position.Y - 179.99, 0)
-                        if root.AssemblyLinearVelocity.Y > 0 then
-                            root.AssemblyLinearVelocity *= Vector3.new(1, 0, 1)
-                        end
                     end
                 end
             end))
@@ -58,12 +50,8 @@ AntiHit = vape.Categories.Blatant:CreateModule({
             if entitylib.isAlive and oldCF and entitylib.character.RootPart == oldRoot then
                 local root = entitylib.character.RootPart
                 root.CFrame = oldCF
-                if oldVelocity then
-                    root.AssemblyLinearVelocity = oldVelocity
-                end
             end
             oldCF = nil
-            oldVelocity = nil
             oldRoot = nil
 
             if oldFallenHeight then
@@ -72,7 +60,7 @@ AntiHit = vape.Categories.Blatant:CreateModule({
             end
         end
     end,
-    Tooltip = 'Jitters your vertical position to make you harder to hit'
+    Tooltip = 'Offsets your position to make RootPart targeting less reliable'
 })
 Intensity = AntiHit:CreateSlider({
     Name = 'Intensity',
