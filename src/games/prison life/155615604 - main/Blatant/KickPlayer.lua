@@ -28,7 +28,7 @@ local function getTargetPlayer(value)
 end
 
 local function selectedTarget()
-	for _, value in {GuardTarget.Value, InmateTarget.Value, CriminalTarget.Value} do
+	for _, value in {GuardTarget.Value, InmateTarget.Value, CriminalTarget.Value, NeutralTarget.Value} do
 		local player = getTargetPlayer(value)
 		if player then return player end
 	end
@@ -80,7 +80,7 @@ local function getTarget(seat)
 	if not targetPlayer then return end
 
 	local cached = tempList[seat]
-	if cached and cached.Player == targetPlayer and cached.Humanoid and not cached.Humanoid.Sit then
+	if cached and cached.Player == targetPlayer and isValidTarget(cached) and cached.RootPart then
 		return cached
 	end
 
@@ -146,7 +146,8 @@ local function flingSeat(seat, target)
 		seat.CFrame = CFrame.new(part.Position) * CFrame.new(-2, -2, -12)
 		sethiddenproperty(seat, 'PhysicsRepRootPart', part)
 
-		local wheels = seat.Parent.Parent:FindFirstChild('Wheels')
+		local vehicle = seat.Parent and seat.Parent.Parent
+		local wheels = vehicle and vehicle:FindFirstChild('Wheels')
 		if wheels then
 			wheels:Destroy()
 		end
@@ -232,7 +233,8 @@ KickPlayer = vape.Categories.Blatant:CreateModule({
 				end
 
 				for _, seat in workspace.CarContainer:QueryDescendants('VehicleSeat') do
-					if isnetworkowner(seat) then
+					local ok, ownsSeat = pcall(isnetworkowner, seat)
+					if ok and ownsSeat then
 						local target = getTarget(seat)
 						if target then
 							flingSeat(seat, target)
@@ -242,6 +244,8 @@ KickPlayer = vape.Categories.Blatant:CreateModule({
 			end))
 		else
 			clearWatchers()
+			table.clear(tempList)
+			dir = 0
 		end
 	end,
 	Tooltip = 'Kicks player specifically. Auto-disables once the target is kicked.'
