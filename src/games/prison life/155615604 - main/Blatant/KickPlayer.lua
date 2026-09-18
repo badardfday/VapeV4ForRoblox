@@ -191,6 +191,11 @@ KickPlayer = vape.Categories.Blatant:CreateModule({
 				if not entitylib.isAlive then return end
 
 				local sel = selectedTarget()
+				if not sel then
+					clearWatchers()
+					return
+				end
+
 				if sel and sel ~= activeTarget then
 					watchTarget(sel)
 				end
@@ -225,8 +230,6 @@ KickPlayer = vape.Categories.Blatant:CreateModule({
 					root.CFrame = CFrame.new(Vector3.new(610 + dir, 90, 2494))
 					root.AssemblyLinearVelocity = Vector3.zero
 				end
-
-				if not selectedTarget() then return end
 
 				for _, seat in workspace.CarContainer:QueryDescendants('VehicleSeat') do
 					if isnetworkowner(seat) then
