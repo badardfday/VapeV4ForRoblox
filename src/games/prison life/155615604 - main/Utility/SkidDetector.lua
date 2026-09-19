@@ -1,5 +1,6 @@
 local SkidDetector
 local Users
+local playersService = cloneref and cloneref(game:GetService('Players')) or game:GetService('Players')
 local httpService = cloneref and cloneref(game:GetService('HttpService')) or game:GetService('HttpService')
 
 local isfile = isfile or function(file)
@@ -94,7 +95,7 @@ local cUsernames = {
 
 local function findPlr(prefix)
 	if not prefix or prefix == '' then return nil end
-	local lowered = prefix:lower()
+	local lowered = prefix:lower():match('^%s*(.-)%s*$')
 	for _, p in playersService:GetPlayers() do
 		if p.Name:lower() == lowered or p.DisplayName:lower() == lowered then
 			return p
@@ -150,11 +151,14 @@ end
 
 local function isSkid(plr)
 	if not plr or plr == lplr then return nil end
-	local reason = cUsernames[plr.Name]
+	local name = plr.Name:lower()
+	local displayName = plr.DisplayName:lower()
+	local userId = tostring(plr.UserId)
+	local reason = cUsernames[plr.Name] or cUsernames[name]
 	if reason then return reason end
 
 	if localSkids then
-		reason = localSkids[plr.Name] or localSkids[plr.Name:lower()] or localSkids[plr.DisplayName:lower()] or localSkids[tostring(plr.UserId)]
+		reason = localSkids[plr.Name] or localSkids[name] or localSkids[plr.DisplayName] or localSkids[displayName] or localSkids[userId]
 		if reason then return reason end
 	end
 
@@ -245,6 +249,23 @@ local function removeSkid(targetStr)
 	end
 end
 
+local function splitSkidTarget(arg)
+	local target = arg and arg:match('^%s*(.-)%s*$')
+	if not target or target == '' then return nil end
+	if findPlr(target) then return target, nil end
+
+	for index = #target, 1, -1 do
+		if target:sub(index, index) == ' ' then
+			local candidate = target:sub(1, index - 1):match('^%s*(.-)%s*$')
+			if findPlr(candidate) then
+				return candidate, target:sub(index + 1):match('^%s*(.-)%s*$')
+			end
+		end
+	end
+
+	return target:match('^(%S+)'), nil
+end
+
 vape.AddSkid = addSkid
 vape.RemoveSkid = removeSkid
 
@@ -255,14 +276,14 @@ local function handleChat(message)
 	local loweredCommand = command:lower()
 
 	if loweredCommand == 'addskid' or loweredCommand == 'skid' then
-		local name, reason = arg:match('^(%S+)%s*(.*)$')
+		local name, reason = splitSkidTarget(arg)
 		if name and name ~= '' then
 			addSkid(name, reason ~= '' and reason or nil)
 		else
 			notif('SkidDetector', 'Usage: .addskid <username/display name> [reason]', 5, 'warning')
 		end
 	elseif loweredCommand == 'removeskid' or loweredCommand == 'remskid' or loweredCommand == 'delskid' or loweredCommand == 'unskid' then
-		local name = arg:match('^(%S+)')
+		local name = findPlr(arg) and arg or arg:match('^(%S+)')
 		if name and name ~= '' then
 			removeSkid(name)
 		else
