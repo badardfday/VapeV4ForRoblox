@@ -7,6 +7,7 @@ local function Modify(part)
 			modified[part] = {part.CanCollide, part.CanQuery}
 		end
 
+			prox.Triggered:Connect(function()
 		part.CanCollide = false
 		part.CanTouch = false
 	end
@@ -25,6 +26,11 @@ AntiFling = vape.Categories.Blatant:CreateModule({
 				part.CanCollide = value[1]
 				part.CanTouch = value[2]
 			end
+
+			for _, prompt in workspace.CarContainer:QueryDescendants('ProximityPrompt') do
+				prompt:Destroy()
+			end
+
 			table.clear(modified)
 		end
 	end,
