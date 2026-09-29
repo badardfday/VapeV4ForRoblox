@@ -187,7 +187,7 @@ KickAll = vape.Categories.Blatant:CreateModule({
 			end))
 		end
 	end,
-	Tooltip = 'aesthetical, just remove collisions on vehicles please, this is the worst.'
+	Tooltip = 'Old version of KickAll, but it works better than the new one.',
 })
 Movement = KickAll:CreateToggle({
 	Name = 'Movement',
